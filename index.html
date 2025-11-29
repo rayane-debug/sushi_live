@@ -1,0 +1,908 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sushi Live - Menu et Réservation</title>
+    <!-- Chargement de Tailwind CSS pour un style moderne et rapide -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Playfair+Display:wght@700&display=swap" rel="stylesheet">
+    <style>
+        /* Configuration de la police Inter par défaut et une police plus élégante pour les titres */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #F8F8F8; /* Fond légèrement gris clair */
+        }
+        .title-font {
+            font-family: 'Playfair Display', serif;
+        }
+        /* Style pour l'effet de survol des boutons */
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 10px rgba(220, 38, 38, 0.4); /* Ombre rouge au survol */
+        }
+        /* Styles pour le modal de confirmation et l'admin panel */
+        .modal {
+            transition: opacity 0.3s ease-in-out, visibility 0.3s ease-in-out;
+        }
+        /* Initialisation masquée pour le panneau admin, sera affichée par JS si l'utilisateur est admin */
+        .admin-panel {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.5s ease-in-out;
+            display: none; /* Masqué par défaut jusqu'à ce que JS décide */
+        }
+        .admin-panel.open {
+            max-height: 2000px; /* Grande valeur pour permettre l'expansion */
+        }
+        /* Bouton Admin toujours fixé */
+        .admin-toggle-button {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            z-index: 1000;
+        }
+        /* Classe pour masquer le bouton Admin par défaut (plus fiable) */
+        .hidden-admin-btn {
+            display: none !important;
+        }
+        /* Style pour l'en-tête du tableau */
+        .table-header {
+            background-color: #e5e7eb; /* Gris clair pour l'en-tête */
+        }
+        
+        /* Styles pour le widget de Chat IA */
+        #aiChatButton {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            z-index: 1000;
+            background-color: #FF5733; /* Orange vif rappelant le saumon */
+            color: white;
+            padding: 1rem;
+            border-radius: 9999px;
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
+            transition: transform 0.3s, background-color 0.3s;
+        }
+        #aiChatButton:hover {
+            background-color: #e04a29;
+            transform: scale(1.05);
+        }
+        
+        #chatContainer {
+            position: fixed;
+            bottom: 100px; /* Au-dessus du bouton */
+            left: 20px;
+            width: 90vw;
+            max-width: 380px;
+            height: 70vh;
+            max-height: 500px;
+            z-index: 999;
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
+            transform: translateY(10px) scale(0.95);
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.3s, visibility 0.3s, transform 0.3s;
+            display: flex; /* Utilisation de flex pour la mise en page interne */
+            flex-direction: column;
+        }
+        #chatContainer.open {
+            opacity: 1;
+            visibility: visible;
+            transform: translateY(0) scale(1);
+        }
+        
+        /* Mascotte Chat SVG Stylisation */
+        .sushi-neko-icon {
+            width: 32px;
+            height: 32px;
+        }
+        .sushi-neko-icon .body { fill: #f8f8f8; } /* Corps blanc */
+        .sushi-neko-icon .tail { fill: #FF5733; } /* Queue saumon */
+        .sushi-neko-icon .ears { fill: #e04a29; } /* Oreilles rouge foncé */
+        .sushi-neko-icon .stripes { fill: #ff9100; } /* Rayures orange clair */
+        .sushi-neko-icon .sushi-rice { fill: #e5e5e5; } /* Riz */
+        .sushi-neko-icon .sushi-topping { fill: #FF5733; } /* Topping saumon */
+
+        /* Zone de messages du chat */
+        #chatMessages {
+            flex-grow: 1;
+            overflow-y: auto;
+            padding: 1rem;
+            background-color: #fefefe;
+            border-bottom: 1px solid #eee;
+        }
+        .chat-message {
+            margin-bottom: 1rem;
+            max-width: 85%;
+        }
+        .user-bubble {
+            background-color: #ffe0e0; /* Rouge très clair */
+            color: #333;
+            padding: 0.6rem 1rem;
+            border-radius: 18px 18px 2px 18px;
+            margin-left: auto;
+            text-align: right;
+        }
+        .ai-bubble {
+            background-color: #f0f0f0; /* Gris clair */
+            color: #333;
+            padding: 0.6rem 1rem;
+            border-radius: 18px 18px 18px 2px;
+            margin-right: auto;
+            text-align: left;
+        }
+        .ai-bubble.loading {
+            font-style: italic;
+            color: #FF5733;
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        
+    </style>
+</head>
+<body class="text-gray-800">
+
+    <!-- CONTENU PRINCIPAL DE L'APPLICATION (Toujours visible) -->
+    <div id="main-app-content">
+        
+        <!-- Section 1: En-tête / Bannière (Hero) -->
+        <header class="bg-cover bg-center h-[60vh] md:h-[80vh] flex items-center shadow-xl" 
+                style="background-image: url('https://placehold.co/1920x800/222/FFF?text=Sushi+Live+Casablanca');">
+            <div class="container mx-auto px-4 text-center bg-black bg-opacity-60 p-8 rounded-lg max-w-2xl">
+                <h1 class="text-6xl md:text-8xl font-bold title-font text-red-600 mb-4 animate-fadeIn">Sushi Live</h1>
+                <p class="text-xl md:text-2xl text-white italic">
+                    La fraîcheur du Japon, l'ambiance de Casablanca.
+                </p>
+                <!-- Bouton pour initier le guidage vers la réservation -->
+                <button id="scrollToReservation" class="mt-8 inline-block px-8 py-3 bg-red-600 text-white font-semibold rounded-full 
+                   transition duration-300 ease-in-out btn-primary">
+                    Réserver une Table
+                </button>
+            </div>
+        </header>
+
+        <!-- Section 2: À Propos -->
+        <section id="about" class="py-16 md:py-24 bg-white">
+            <div class="container mx-auto px-4 max-w-6xl">
+                <h2 class="text-4xl font-bold text-center mb-12 title-font text-red-600">Notre Histoire</h2>
+                <div class="md:grid md:grid-cols-2 gap-12 items-center">
+                    <div class="space-y-6">
+                        <p class="text-lg leading-relaxed">
+                            Situé au cœur de Casablanca, Sushi Live est né d'une passion pour la cuisine japonaise authentique. Nous nous engageons à n'utiliser que les poissons les plus frais et des ingrédients de la plus haute qualité pour garantir une expérience gustative inoubliable.
+                        </p>
+                        <p class="text-lg leading-relaxed border-l-4 border-red-600 pl-4 italic bg-gray-50 p-3 rounded-lg">
+                            "Chaque pièce de sushi est une œuvre d'art éphémère, préparée avec respect et précision."
+                        </p>
+                        <p class="text-lg leading-relaxed">
+                            Venez découvrir notre atmosphère élégante et chaleureuse, idéale pour un déjeuner d'affaires, un dîner romantique ou une soirée entre amis.
+                        </p>
+                    </div>
+                    <div class="mt-8 md:mt-0 rounded-lg shadow-2xl overflow-hidden">
+                        <img src="https://placehold.co/600x400/333/FFF?text=Cuisine+Authentique" alt="Intérieur du restaurant Sushi Live" class="w-full h-full object-cover">
+                    </div>
+                </div>
+            </div>
+        </section>
+        
+        <!-- Section 3: Menu (Mise en avant) -->
+        <section id="menu" class="py-16 md:py-24 bg-gray-50">
+            <div class="container mx-auto px-4 max-w-6xl">
+                <h2 class="text-4xl font-bold text-center mb-16 title-font text-red-600">Nos Spécialités</h2>
+                
+                <div class="grid md:grid-cols-3 gap-8">
+                    <!-- Spécialité 1 -->
+                    <div class="bg-white p-6 rounded-xl shadow-lg hover:shadow-2xl transition duration-300 transform hover:scale-105 border-t-4 border-red-600">
+                        <img src="https://placehold.co/400x250/555/FFF?text=Dragon+Roll" alt="Dragon Roll" class="w-full h-40 object-cover rounded-md mb-4">
+                        <h3 class="text-2xl font-semibold title-font mb-2">Le Dragon Roll</h3>
+                        <p class="text-red-600 font-bold mb-3">65 DH</p>
+                        <p class="text-gray-600">Crevettes tempura, avocat, recouvert d'anguille caramélisée et d'une sauce spéciale secrète.</p>
+                    </div>
+                    
+                    <!-- Spécialité 2 -->
+                    <div class="bg-white p-6 rounded-xl shadow-lg hover:shadow-2xl transition duration-300 transform hover:scale-105 border-t-4 border-red-600">
+                        <img src="https://placehold.co/400x250/555/FFF?text=Sashimi+Thon+Frais" alt="Sashimi de Thon" class="w-full h-40 object-cover rounded-md mb-4">
+                        <h3 class="text-2xl font-semibold title-font mb-2">Sashimi Royal (Thon)</h3>
+                        <p class="text-red-600 font-bold mb-3">80 DH</p>
+                        <p class="text-gray-600">Tranches épaisses de thon rouge de première qualité, fondantes et ultra-fraîches.</p>
+                    </div>
+                    
+                    <!-- Spécialité 3 -->
+                    <div class="bg-white p-6 rounded-xl shadow-lg hover:shadow-2xl transition duration-300 transform hover:scale-105 border-t-4 border-red-600">
+                        <img src="https://placehold.co/400x250/555/FFF?text=Bento+Express" alt="Bento Box" class="w-full h-40 object-cover rounded-md mb-4">
+                        <h3 class="text-2xl font-semibold title-font mb-2">Bento Box Express</h3>
+                        <p class="text-red-600 font-bold mb-3">120 DH</p>
+                        <p class="text-gray-600">Assortiment de 12 pièces (Sushi, Maki, California), servi avec soupe Miso et salade.</p>
+                    </div>
+                </div>
+                
+                <div class="text-center mt-12">
+                    <a href="#" class="inline-block px-10 py-4 border-2 border-red-600 text-red-600 font-semibold rounded-full 
+                       transition duration-300 ease-in-out hover:bg-red-600 hover:text-white">
+                        Voir la Carte Complète
+                    </a>
+                </div>
+            </div>
+        </section>
+
+        <!-- Section 4: Localisation & Réservation -->
+        <section id="contact" class="py-16 md:py-24 bg-white">
+            <div class="container mx-auto px-4 max-w-6xl">
+                <h2 class="text-4xl font-bold text-center mb-12 title-font text-red-600">Où Nous Trouver</h2>
+                
+                <div class="md:grid md:grid-cols-3 gap-12 items-start">
+                    
+                    <!-- Contact et Infos -->
+                    <div class="md:col-span-1 space-y-6 p-6 border rounded-lg shadow-md bg-gray-50">
+                        <h3 class="text-2xl font-semibold title-font text-gray-800">Contact & Infos</h3>
+                        
+                        <div class="flex items-center space-x-3">
+                            <svg class="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.828 0l-4.243-4.243a8 8 0 1111.314 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                            <p>45 rue 29, Casablanca</p>
+                        </div>
+                        
+                        <div class="flex items-center space-x-3">
+                            <svg class="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.128a11.033 11.033 0 005.972 5.972l1.128-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"></path></svg>
+                            <p>+212 5226-57055</p>
+                        </div>
+
+                        <div class="flex items-center space-x-3">
+                            <svg class="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                            <p>Lun - Sam : 12h00 - 23h00</p>
+                        </div>
+                        
+                        <!-- Ligne mise à jour avec la nouvelle adresse email -->
+                        <a href="mailto:lesushilive@gmail.com" class="text-red-600 hover:text-red-800 font-semibold block pt-2">lesushilive@gmail.com</a>
+                        
+                    </div>
+
+                    <!-- Formulaire de Réservation (Espace réservé) -->
+                    <div class="md:col-span-2 mt-12 md:mt-0 p-8 bg-white rounded-lg shadow-2xl">
+                        <h3 class="text-3xl font-semibold title-font text-gray-800 mb-6 border-b pb-3">Réserver une Table</h3>
+                        <form id="reservationForm">
+                            <div class="grid sm:grid-cols-2 gap-6">
+                                <input type="text" id="res_name" placeholder="Votre Nom" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-red-500 focus:border-red-500" required>
+                                <input type="email" id="res_email" placeholder="Votre Email" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-red-500 focus:border-red-500" required>
+                                <input type="tel" id="res_phone" placeholder="Téléphone" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-red-500 focus:border-red-500" required>
+                                <input type="number" id="res_people" placeholder="Nombre de Personnes" min="1" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-red-500 focus:border-red-500" required>
+                                <input type="date" id="res_date" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-red-500 focus:border-red-500" required>
+                                <input type="time" id="res_time" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-red-500 focus:border-red-500" required>
+                            </div>
+                            <textarea id="res_message" placeholder="Message ou Demande Spéciale (optionnel)" rows="4" class="w-full mt-6 p-3 border border-gray-300 rounded-lg focus:ring-red-500 focus:border-red-500"></textarea>
+                            <button type="submit" id="submitButton" class="mt-6 w-full px-8 py-3 bg-red-600 text-white font-bold rounded-lg 
+                                transition duration-300 ease-in-out btn-primary">
+                                Confirmer la Réservation
+                            </button>
+                            <p id="loadingMessage" class="hidden text-center text-red-600 mt-4 font-semibold">Envoi de la réservation en cours...</p>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Modal de Confirmation/Erreur (Utilisé au lieu d'alert()) -->
+        <div id="statusModal" class="modal fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center opacity-0 invisible z-50">
+            <div class="bg-white p-8 rounded-lg shadow-2xl max-w-sm w-full text-center transform transition-transform duration-300 scale-90">
+                <div id="modalIcon" class="mb-4 text-4xl"></div>
+                <h4 id="modalTitle" class="text-2xl font-bold mb-2 title-font"></h4>
+                <p id="modalMessage" class="text-gray-600 mb-6"></p>
+                <!-- Ajout de l'ID pour l'écouteur JS, suppression de onclick -->
+                <button id="closeModalButton" class="px-6 py-2 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700 transition">
+                    Fermer
+                </button>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <footer class="bg-gray-900 text-white py-8">
+            <div class="container mx-auto px-4 text-center">
+                <p>&copy; 2025 Sushi Live - Casablanca. Tous droits réservés.</p>
+                <div class="flex justify-center space-x-6 mt-4">
+                    <a href="#" class="text-gray-400 hover:text-red-600 transition">Facebook</a>
+                    <a href="#" class="text-gray-400 hover:text-red-600 transition">Instagram</a>
+                </div>
+            </div>
+        </footer>
+
+        <!-- Section Admin (Tableau des Réservations) - Initialement masquée pour les non-admin ID -->
+        <section id="adminPanel" class="admin-panel bg-gray-100 py-12">
+            <div class="container mx-auto px-4 max-w-6xl">
+                <h2 class="text-4xl font-bold title-font text-gray-800 mb-8 text-center">Tableau de Bord des Réservations</h2>
+                <p class="text-center text-gray-600 mb-4 font-mono">ID Administrateur à remplacer: <span id="adminUserIdDisplay">Chargement...</span></p>
+
+                <div class="bg-white p-6 rounded-lg shadow-xl overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="table-header">
+                            <tr>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nom</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Heure</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nb. Pers.</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Téléphone</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Message</th>
+                            </tr>
+                        </thead>
+                        <tbody id="reservationsTableBody" class="bg-white divide-y divide-gray-200">
+                            <!-- Les réservations seront insérées ici par JavaScript -->
+                            <tr><td colspan="6" class="p-4 text-center text-gray-500">Chargement des réservations...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- Bouton pour afficher/masquer le panneau d'administration. (Seulement visible pour l'ADMIN ID ou après code secret) -->
+        <!-- Utilisation de la classe hidden-admin-btn pour masquer par défaut, le JS la retirera -->
+        <button id="adminToggleButton" class="admin-toggle-button px-5 py-3 bg-gray-800 text-white font-semibold rounded-full 
+            shadow-lg hover:bg-gray-700 transition duration-300 ease-in-out hidden-admin-btn">
+            Admin
+        </button>
+        
+        <!-- Modal pour le Code Secret Admin -->
+        <div id="adminCodeModal" class="modal fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center opacity-0 invisible z-50">
+            <div class="bg-white p-8 rounded-lg shadow-2xl max-w-sm w-full text-center transform transition-transform duration-300 scale-90">
+                <h4 class="text-2xl font-bold mb-4 title-font text-red-600">Accès Administrateur</h4>
+                <p class="text-gray-600 mb-6">Veuillez entrer le code secret pour accéder au tableau de bord.</p>
+                <input type="password" id="secretCodeInput" placeholder="Entrez le code secret" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-red-500 focus:border-red-500 mb-4 text-center" required>
+                <p id="codeError" class="text-red-500 hidden mb-4 font-semibold">Code incorrect. Veuillez réessayer.</p>
+                <button id="checkAdminCodeButton" class="px-6 py-2 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700 transition">
+                    Entrer
+                </button>
+                <button id="closeAdminCodeModalButton" class="ml-4 px-6 py-2 bg-gray-300 text-gray-800 font-semibold rounded-lg hover:bg-gray-400 transition">
+                    Annuler
+                </button>
+            </div>
+        </div>
+
+
+        <!-- Toast Notification (Popup) for New Reservations -->
+        <div id="newReservationToast" class="fixed top-0 left-1/2 transform -translate-x-1/2 mt-4 p-4 rounded-lg shadow-2xl z-[1010] 
+            bg-red-600 text-white font-semibold transition-all duration-500 ease-in-out opacity-0 invisible">
+            <div class="flex items-center space-x-3">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                <span id="toastMessage"></span>
+            </div>
+        </div>
+
+
+        <!-- WIDGET DE CHAT IA FLOTTANT (Sushi-Neko) -->
+        <button id="aiChatButton" aria-label="Ouvrir le chat assistant">
+            <!-- SVG Mascotte Chat Mignon en Sushi -->
+            <svg class="sushi-neko-icon" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <!-- Corps et Tête du Chat -->
+                <path class="body" d="M24 8C14.717 8 7 15.717 7 25c0 6.627 3.987 12.38 10.05 15.022L24 44l6.95-3.978C37.013 37.38 41 31.627 41 25c0-9.283-7.717-17-17-17z" stroke="#333" stroke-width="1.5"/>
+                <!-- Topping de Sushi (Saumon) -->
+                <rect x="14" y="10" width="20" height="15" rx="7.5" class="sushi-topping" stroke="#333" stroke-width="1.5"/>
+                <!-- Oreilles -->
+                <path class="ears" d="M19 8l-3-5h-2l4 5zM29 8l3-5h2l-4 5z" stroke="#333" stroke-width="1.5" stroke-linejoin="round"/>
+                <!-- Yeux et Moustache (Minimaliste) -->
+                <circle cx="21" cy="23" r="1.5" fill="#333"/>
+                <circle cx="27" cy="23" r="1.5" fill="#333"/>
+                <!-- Bouche -->
+                <path d="M24 26.5c1 1 2 1 3 0" stroke="#333" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>
+        </button>
+        
+        <div id="chatContainer" class="bg-white rounded-xl">
+            <!-- En-tête du Chat -->
+            <div class="p-4 bg-red-600 text-white rounded-t-xl flex justify-between items-center">
+                <h3 class="text-lg font-semibold flex items-center">
+                    <span class="text-2xl mr-2">🍣</span> Sushi-Neko, Votre Assistant
+                </h3>
+                <button id="closeChatButton" class="p-1 rounded-full hover:bg-red-700 transition">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+            
+            <!-- Zone des Messages -->
+            <div id="chatMessages">
+                <!-- Message initial sera généré par JS après le clic sur Réserver -->
+            </div>
+            
+            <!-- Zone de Saisie -->
+            <div class="p-4 border-t border-gray-200">
+                <div class="flex gap-2">
+                    <input type="text" id="aiPromptInput" placeholder="Écrivez votre question..." 
+                           class="flex-grow p-3 border border-gray-300 rounded-lg focus:ring-red-500 focus:border-red-500">
+                    <button id="aiSendButton" class="px-4 py-3 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700 transition duration-300">
+                        <svg id="sendIcon" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- Logique JavaScript pour Firebase, la Réservation, Admin et l'IA (Gemini) -->
+    <!-- ATTENTION: Utilisation de type="module" oblige à utiliser window.onload pour garantir l'accès aux éléments du DOM -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, addDoc, collection, onSnapshot, query, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Définir le niveau de log pour le débogage de Firebase
+        setLogLevel('Debug');
+
+        // Variables Globales Fournies par l'environnement
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+        
+        // CODE SECRET pour déverrouiller le panneau admin (mécanisme secondaire)
+        const ADMIN_SECRET_CODE = "2506"; 
+
+        // !!! IMPORTANT : REMPLACEZ CETTE CHAÎNE PAR VOTRE ID UTILISATEUR RÉEL
+        // Vous devez vous connecter une fois pour obtenir votre ID (via console.log) et le coller ici.
+        const ADMIN_ID = "PLACEHOLDER_ADMIN_USER_ID"; 
+        
+        const GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=";
+        const API_KEY = ""; // La clé API sera fournie automatiquement au runtime
+
+        let db;
+        let auth;
+        let userId;
+        let hasLoadedInitialData = false; 
+        let isAdminModeActive = false; 
+
+        // Références aux éléments du DOM 
+        const collectionPath = `artifacts/${appId}/public/data/reservations`;
+
+
+        // --- Fonctions d'Affichage et Navigation ---
+
+        function scrollToReservationAndGuide() {
+            const contactSection = document.getElementById('contact');
+            const chatContainer = document.getElementById('chatContainer');
+            
+            if (contactSection) {
+                // 1. Défilement vers la section Réservation
+                contactSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+                // 2. Ouvrir le chat et ajouter le message de guidage après un court délai
+                setTimeout(() => {
+                    if (chatContainer && !chatContainer.classList.contains('open')) {
+                        toggleChat();
+                    }
+                    // Vérifier si c'est le message initial du chat pour éviter les duplications
+                    const chatMessages = document.getElementById('chatMessages');
+                    if (chatMessages && chatMessages.children.length === 0) {
+                        appendMessage('ai', '🐾 Bienvenue ! Pour faire votre réservation, descendez un peu plus sur cette page. Vous y trouverez le formulaire ! Laissez-moi savoir si vous avez des questions sur le menu ! 🍣');
+                    }
+                }, 800); 
+            }
+        }
+
+        function closeModal() {
+            const modal = document.getElementById('statusModal');
+            if (modal) {
+                modal.classList.add('opacity-0', 'invisible');
+                modal.querySelector('div').classList.add('scale-90');
+                modal.querySelector('div').classList.remove('scale-100');
+            }
+        }
+        
+        function toggleAdminPanelInternal() {
+            const adminPanel = document.getElementById('adminPanel');
+            const adminToggleButton = document.getElementById('adminToggleButton');
+            
+            const isUserActuallyAdmin = (userId === ADMIN_ID); 
+            
+            if (adminPanel && (isUserActuallyAdmin || isAdminModeActive)) { 
+                adminPanel.classList.toggle('open');
+                adminPanel.style.display = 'block'; 
+                
+                // Mettre à jour le texte du bouton Admin
+                if (adminToggleButton) {
+                    adminToggleButton.textContent = adminPanel.classList.contains('open') ? 'Fermer Admin' : 'Admin';
+                }
+
+                if (adminPanel.classList.contains('open')) {
+                    adminPanel.scrollIntoView({ behavior: 'smooth' });
+                }
+            }
+        }
+        
+        function promptForAdminCode() {
+            const adminCodeModal = document.getElementById('adminCodeModal');
+            const codeError = document.getElementById('codeError');
+            const secretCodeInput = document.getElementById('secretCodeInput');
+            const isUserActuallyAdmin = (userId === ADMIN_ID);
+
+            if (isUserActuallyAdmin || isAdminModeActive) {
+                // Si l'utilisateur est l'admin ID ou a déjà entré le code, il peut toggler directement
+                toggleAdminPanelInternal();
+            } else if (adminCodeModal) {
+                // Sinon, demander le code secret
+                if (codeError) codeError.classList.add('hidden');
+                if (secretCodeInput) secretCodeInput.value = '';
+                
+                adminCodeModal.classList.remove('opacity-0', 'invisible');
+                adminCodeModal.querySelector('div').classList.remove('scale-90');
+                adminCodeModal.querySelector('div').classList.add('scale-100');
+            }
+        }
+
+        function closeAdminCodeModal() {
+            const adminCodeModal = document.getElementById('adminCodeModal');
+            if (adminCodeModal) {
+                adminCodeModal.classList.add('opacity-0', 'invisible');
+                adminCodeModal.querySelector('div').classList.remove('scale-100');
+                adminCodeModal.querySelector('div').classList.add('scale-90');
+            }
+        }
+
+        function checkAdminCode() {
+            const secretCodeInput = document.getElementById('secretCodeInput');
+            const codeError = document.getElementById('codeError');
+            
+            if (!secretCodeInput || !codeError) return;
+
+            if (secretCodeInput.value === ADMIN_SECRET_CODE) {
+                isAdminModeActive = true; 
+                closeAdminCodeModal();
+                toggleAdminPanelInternal(); 
+                showToastNotification("Mode Administrateur activé par code secret. Notifications temps réel ON.");
+            } else {
+                codeError.classList.remove('hidden');
+            }
+        }
+
+        // --- Fonctions Générales (Modal/Toast) ---
+
+        function showModal(isSuccess, title, message) {
+            const modal = document.getElementById('statusModal');
+            if (!modal) return;
+
+            document.getElementById('modalTitle').textContent = title;
+            document.getElementById('modalMessage').textContent = message;
+            document.getElementById('modalIcon').textContent = isSuccess ? '✅' : '❌';
+            modal.classList.remove('opacity-0', 'invisible');
+            modal.querySelector('div').classList.add('scale-100');
+            modal.querySelector('div').classList.remove('scale-90');
+        }
+
+        function showToastNotification(message) {
+            const toastElement = document.getElementById('newReservationToast');
+            if (!toastElement) return;
+
+            document.getElementById('toastMessage').textContent = message;
+            toastElement.classList.remove('opacity-0', 'invisible');
+            toastElement.classList.add('opacity-100', 'visible');
+            
+            setTimeout(() => {
+                toastElement.classList.remove('opacity-100', 'visible');
+                toastElement.classList.add('opacity-0', 'invisible');
+            }, 5000);
+        }
+        
+        // --- Fonctions de l'Assistant IA (Sushi-Neko) ---
+
+        function toggleChat() {
+            const chatContainer = document.getElementById('chatContainer');
+            if (chatContainer) {
+                chatContainer.classList.toggle('open');
+                if (chatContainer.classList.contains('open')) {
+                    document.getElementById('aiPromptInput')?.focus();
+                }
+            }
+        }
+        
+        function appendMessage(sender, text) {
+            const chatMessages = document.getElementById('chatMessages');
+            if (!chatMessages) return;
+
+            const messageDiv = document.createElement('div');
+            messageDiv.classList.add('chat-message');
+            messageDiv.classList.add(sender === 'user' ? 'user-bubble' : 'ai-bubble');
+            messageDiv.textContent = text;
+            chatMessages.appendChild(messageDiv);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+            return messageDiv; 
+        }
+
+        async function callGeminiApi(prompt, maxRetries = 5) {
+            const systemPrompt = `Vous êtes Sushi-Neko, la mascotte du restaurant "Sushi Live Casablanca". Vous êtes un petit chat mignon et enthousiaste, très serviable et expert en sushis.
+                Vos spécialités sont : Le Dragon Roll (Crevettes tempura, avocat, anguille caramélisée, 65 DH), le Sashimi Royal (Thon frais de première qualité, 80 DH), et la Bento Box Express (Assortiment 12 pièces, 120 DH).
+                Répondez aux questions sur le menu, les ingrédients, les allergènes (indiquez que les allergènes courants incluent le poisson, le soja et le gluten et qu'il faut toujours consulter un serveur pour les cas graves) ou faites des recommandations.
+                Répondez toujours en français avec un ton léger, amical et utilisez des emojis de chat (🐾) et de sushi (🍣). Ne mentionnez jamais que vous êtes une IA ou un modèle de langage.`;
+            
+            const payload = {
+                contents: [{ parts: [{ text: prompt }] }],
+                systemInstruction: { parts: [{ text: systemPrompt }] },
+            };
+
+            for (let i = 0; i < maxRetries; i++) {
+                try {
+                    const response = await fetch(GEMINI_API_URL + API_KEY, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+
+                    if (response.status === 429) {
+                        const delay = Math.pow(2, i) * 1000 + Math.random() * 1000;
+                        await new Promise(resolve => setTimeout(resolve, delay));
+                        continue;
+                    }
+
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+
+                    const result = await response.json();
+                    return result.candidates?.[0]?.content?.parts?.[0]?.text || "Miaooups ! 😿 Je n'ai pas pu trouver cette réponse. Réessayez ?";
+
+                } catch (error) {
+                    console.error("Erreur lors de l'appel de l'API Gemini:", error);
+                    if (i === maxRetries - 1) {
+                        return "Désolé, une erreur technique est survenue. Le chef est en train de régler ça ! 🍣";
+                    }
+                }
+            }
+            return "Une erreur inattendue est survenue après plusieurs tentatives. 🐾";
+        }
+        
+        async function sendAiPrompt() {
+            const aiPromptInput = document.getElementById('aiPromptInput');
+            const aiSendButton = document.getElementById('aiSendButton');
+            const chatMessages = document.getElementById('chatMessages');
+
+            const prompt = aiPromptInput?.value.trim() || '';
+            if (!prompt) return;
+
+            appendMessage('user', prompt);
+            aiPromptInput.value = '';
+            
+            const loadingBubble = appendMessage('ai', 'Sushi-Neko prépare votre réponse...');
+            loadingBubble.classList.add('loading');
+            
+            if (aiSendButton) aiSendButton.disabled = true;
+            if (aiPromptInput) aiPromptInput.disabled = true;
+            
+            try {
+                const responseText = await callGeminiApi(prompt);
+                
+                loadingBubble.textContent = responseText;
+                loadingBubble.classList.remove('loading');
+
+            } catch (error) {
+                loadingBubble.textContent = "Erreur de connexion avec Sushi-Neko. Veuillez réessayer. ❌";
+                loadingBubble.classList.add('text-red-500');
+                console.error("Erreur dans sendAiPrompt:", error);
+            } finally {
+                if (aiSendButton) aiSendButton.disabled = false;
+                if (aiPromptInput) aiPromptInput.disabled = false;
+                if (aiPromptInput) aiPromptInput.focus();
+                if (chatMessages) chatMessages.scrollTop = chatMessages.scrollHeight;
+            }
+        }
+
+
+        // --- Initialisation de Firebase et Logique Admin/Réservation ---
+
+        function checkAdminAccess() {
+            const adminToggleButton = document.getElementById('adminToggleButton');
+            const adminPanel = document.getElementById('adminPanel');
+            const adminUserIdDisplay = document.getElementById('adminUserIdDisplay');
+
+            const isUserActuallyAdmin = (userId === ADMIN_ID);
+            
+            if (adminUserIdDisplay) adminUserIdDisplay.textContent = userId;
+
+            if (adminToggleButton) {
+                // Rendre le bouton visible dans tous les cas, puis le cacher si on est sur la page Admin
+                adminToggleButton.classList.remove('hidden-admin-btn');
+                
+                if (isUserActuallyAdmin) {
+                    console.warn(`[ATTENTION ADMIN] Votre ID utilisateur actuel (${userId}) correspond à l'ADMIN_ID. Vous avez un accès direct.`);
+                    if (adminPanel) adminPanel.style.display = 'block';
+                    isAdminModeActive = true; 
+                    showToastNotification(`Bienvenue Administrateur ! Votre ID est: ${userId}`);
+                } else {
+                    if (ADMIN_ID === "PLACEHOLDER_ADMIN_USER_ID") {
+                         console.warn(`[ADMIN WARNING] Votre ID utilisateur est: ${userId}. Si vous êtes l'administrateur, remplacez "PLACEHOLDER_ADMIN_USER_ID" par cet ID dans le code JavaScript !`);
+                    }
+                    if (adminPanel) adminPanel.style.display = 'none';
+                    isAdminModeActive = false;
+                }
+            }
+        }
+
+
+        async function initializeFirebase() {
+            if (!firebaseConfig) {
+                console.error("Firebase config is missing.");
+                return;
+            }
+            try {
+                const app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
+                
+                onAuthStateChanged(auth, async (user) => {
+                    if (user) {
+                        userId = user.uid;
+                        checkAdminAccess(); 
+                        listenForReservations(); 
+                    } else {
+                        if (initialAuthToken) {
+                            await signInWithCustomToken(auth, initialAuthToken);
+                        } else {
+                            // Connexion anonyme si aucun token initial n'est fourni
+                            await signInAnonymously(auth); 
+                        }
+                    }
+                });
+
+
+            } catch (error) {
+                console.error("Error during Firebase initialization or authentication:", error);
+                showModal(false, "Erreur Critique", "Impossible de se connecter au service de réservation.");
+            }
+        }
+
+        function listenForReservations() {
+            if (!db) return;
+
+            const q = query(collection(db, collectionPath));
+            
+            const reservationsTableBody = document.getElementById('reservationsTableBody');
+
+            onSnapshot(q, (snapshot) => {
+                let html = '';
+                const reservations = [];
+                
+                const isUserActuallyAdmin = (userId === ADMIN_ID);
+
+                snapshot.docChanges().forEach((change) => {
+                    if (change.type === "added" && hasLoadedInitialData && (isUserActuallyAdmin || isAdminModeActive)) { 
+                        const newReservation = change.doc.data();
+                        const message = `Nouvelle réservation de ${newReservation.name} pour ${newReservation.people} pers. à ${newReservation.time} !`;
+                        showToastNotification(message);
+                    }
+                });
+
+                snapshot.forEach((doc) => {
+                    reservations.push({ id: doc.id, ...doc.data() });
+                });
+                
+                if (reservations.length === 0) {
+                    html = '<tr><td colspan="6" class="p-4 text-center text-gray-500">Aucune réservation trouvée pour le moment.</td></tr>';
+                } else {
+                    reservations.sort((a, b) => {
+                        const dateA = new Date(`${a.date}T${a.time}`);
+                        const dateB = new Date(`${b.date}T${b.time}`);
+                        return dateA - dateB;
+                    });
+
+                    reservations.forEach(res => {
+                        html += `
+                            <tr class="hover:bg-red-50 transition duration-150">
+                                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${res.name}</td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${res.date}</td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm font-semibold text-red-600">${res.time}</td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-center">${res.people}</td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${res.phone}</td>
+                                <td class="px-6 py-4 text-sm text-gray-500 max-w-xs truncate">${res.message || '-'}</td>
+                            </tr>
+                        `;
+                    });
+                }
+
+                if (reservationsTableBody) reservationsTableBody.innerHTML = html;
+
+                if (!hasLoadedInitialData) {
+                    hasLoadedInitialData = true;
+                }
+
+            }, (error) => {
+                console.error("Erreur lors de l'écoute des réservations:", error);
+                if (reservationsTableBody) reservationsTableBody.innerHTML = '<tr><td colspan="6" class="p-4 text-center text-red-500">Erreur de chargement.</td></tr>';
+            });
+        }
+
+
+        async function handleReservationSubmit(event) {
+            event.preventDefault();
+            
+            const form = document.getElementById('reservationForm');
+            const submitButton = document.getElementById('submitButton');
+            const loadingMessage = document.getElementById('loadingMessage');
+
+            if (!db || !userId) {
+                showModal(false, "Erreur", "Le service de réservation n'est pas prêt. Veuillez réessayer.");
+                return;
+            }
+
+            if (submitButton) submitButton.disabled = true;
+            if (loadingMessage) loadingMessage.classList.remove('hidden');
+
+            const reservationData = {
+                name: document.getElementById('res_name').value,
+                email: document.getElementById('res_email').value,
+                phone: document.getElementById('res_phone').value,
+                people: parseInt(document.getElementById('res_people').value, 10),
+                date: document.getElementById('res_date').value,
+                time: document.getElementById('res_time').value,
+                message: document.getElementById('res_message').value || '',
+                timestamp: new Date().toISOString(),
+                reservedBy: userId
+            };
+
+            try {
+                // Envoi des données à Firebase Firestore
+                await addDoc(collection(db, collectionPath), reservationData);
+
+                // Affichage d'un modal de confirmation
+                showModal(true, "Réservation Confirmée !", `Merci ${reservationData.name}. Votre table pour ${reservationData.people} personne(s) le ${reservationData.date} à ${reservationData.time} a été réservée.`);
+                
+                if (form) form.reset();
+
+            } catch (error) {
+                console.error("Error saving reservation:", error);
+                showModal(false, "Échec de la Réservation", "Une erreur s'est produite lors de l'enregistrement. Veuillez vérifier votre connexion ou réessayer.");
+            } finally {
+                if (submitButton) submitButton.disabled = false;
+                if (loadingMessage) loadingMessage.classList.add('hidden');
+            }
+        }
+
+        // --- Initialisation des Écouteurs d'Événements (Solution Robuste) ---
+        function initApp() {
+            // Références des boutons
+            const form = document.getElementById('reservationForm');
+            const closeModalButton = document.getElementById('closeModalButton');
+            const adminToggleButton = document.getElementById('adminToggleButton');
+            const checkAdminCodeButton = document.getElementById('checkAdminCodeButton');
+            const closeAdminCodeModalButton = document.getElementById('closeAdminCodeModalButton');
+            const aiChatButton = document.getElementById('aiChatButton');
+            const closeChatButton = document.getElementById('closeChatButton');
+            const aiSendButton = document.getElementById('aiSendButton');
+            const aiPromptInput = document.getElementById('aiPromptInput');
+            const scrollToReservationBtn = document.getElementById('scrollToReservation');
+
+
+            // 1. Bouton "Réserver une Table" dans le Hero
+            if (scrollToReservationBtn) scrollToReservationBtn.addEventListener('click', scrollToReservationAndGuide);
+
+            // 2. Formulaire de Réservation
+            if (form) form.addEventListener('submit', handleReservationSubmit);
+            
+            // 3. Modal de Statut
+            if (closeModalButton) closeModalButton.addEventListener('click', closeModal);
+            
+            // 4. Panneau Admin
+            if (adminToggleButton) adminToggleButton.addEventListener('click', promptForAdminCode);
+            
+            // 5. Modal Code Admin
+            if (checkAdminCodeButton) checkAdminCodeButton.addEventListener('click', checkAdminCode);
+            if (closeAdminCodeModalButton) closeAdminCodeModalButton.addEventListener('click', closeAdminCodeModal);
+            
+            // 6. Chat IA (Sushi-Neko)
+            if (aiChatButton) aiChatButton.addEventListener('click', toggleChat);
+            if (closeChatButton) closeChatButton.addEventListener('click', toggleChat);
+            if (aiSendButton) aiSendButton.addEventListener('click', sendAiPrompt);
+            if (aiPromptInput) {
+                // Permet d'envoyer le message en appuyant sur Entrée dans le champ de saisie
+                aiPromptInput.addEventListener('keypress', (event) => {
+                    if (event.key === 'Enter') {
+                        sendAiPrompt();
+                    }
+                });
+            }
+
+            // 7. Initialisation de Firebase et de l'authentification
+            initializeFirebase();
+        }
+
+        // Exécuter initApp lorsque la page est entièrement chargée
+        window.addEventListener('load', initApp);
+
+    </script>
+
+</body>
+</html>
