@@ -42,14 +42,6 @@
             right: 20px;
             z-index: 1000;
         }
-        /* Classe pour masquer le bouton Admin par défaut (retirée pour le rendre visible) */
-        /* .hidden-admin-btn {
-            display: none !important;
-        } */
-        /* Style pour l'en-tête du tableau */
-        .table-header {
-            background-color: #e5e7eb; /* Gris clair pour l'en-tête */
-        }
         
         /* Styles pour le widget de Chat IA */
         #aiChatButton {
@@ -273,9 +265,10 @@
                                 <input type="time" id="res_time" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-red-500 focus:border-red-500" required>
                             </div>
                             <textarea id="res_message" placeholder="Message ou Demande Spéciale (optionnel)" rows="4" class="w-full mt-6 p-3 border border-gray-300 rounded-lg focus:ring-red-500 focus:border-red-500"></textarea>
-                            <button type="submit" id="submitButton" class="mt-6 w-full px-8 py-3 bg-red-600 text-white font-bold rounded-lg 
-                                transition duration-300 ease-in-out btn-primary">
-                                Confirmer la Réservation
+                            <!-- NOTE: Le texte et l'état de ce bouton sont maintenant gérés par la fonction updateFormState() en JS -->
+                            <button type="submit" id="submitButton" disabled class="mt-6 w-full px-8 py-3 bg-red-600 text-white font-bold rounded-lg 
+                                transition duration-300 ease-in-out btn-primary opacity-70 cursor-not-allowed">
+                                Service en cours de connexion...
                             </button>
                             <p id="loadingMessage" class="hidden text-center text-red-600 mt-4 font-semibold">Envoi de la réservation en cours...</p>
                         </form>
@@ -336,7 +329,6 @@
         </section>
 
         <!-- Bouton pour afficher/masquer le panneau d'administration. (MAINTENANT TOUJOURS VISIBLE) -->
-        <!-- La classe 'hidden-admin-btn' a été retirée pour le rendre visible par défaut -->
         <button id="adminToggleButton" class="admin-toggle-button px-5 py-3 bg-gray-800 text-white font-semibold rounded-full 
             shadow-lg hover:bg-gray-700 transition duration-300 ease-in-out">
             Admin
@@ -447,6 +439,7 @@
         let userId;
         let hasLoadedInitialData = false; 
         let isAdminModeActive = false; // Vrai si l'utilisateur est ADMIN_ID ou a entré le code secret
+        let isAuthReady = false; // NOUVEAU: Indicateur de l'état d'authentification pour le formulaire
 
         // Références aux éléments du DOM 
         const collectionPath = `artifacts/${appId}/public/data/reservations`;
@@ -485,6 +478,21 @@
             }
         }
         
+        function updateFormState() {
+            const submitButton = document.getElementById('submitButton');
+            if (submitButton) {
+                if (isAuthReady) {
+                    submitButton.textContent = "Confirmer la Réservation";
+                    submitButton.disabled = false;
+                    submitButton.classList.remove('opacity-70', 'cursor-not-allowed');
+                } else {
+                    submitButton.textContent = "Service en cours de connexion...";
+                    submitButton.disabled = true;
+                    submitButton.classList.add('opacity-70', 'cursor-not-allowed');
+                }
+            }
+        }
+
         function toggleAdminPanelInternal() {
             const adminPanel = document.getElementById('adminPanel');
             const adminToggleButton = document.getElementById('adminToggleButton');
@@ -709,6 +717,7 @@
         async function initializeFirebase() {
             if (!firebaseConfig) {
                 console.error("Firebase config is missing.");
+                updateFormState(); // Mise à jour pour indiquer une erreur de configuration
                 return;
             }
             try {
@@ -719,14 +728,23 @@
                 onAuthStateChanged(auth, async (user) => {
                     if (user) {
                         userId = user.uid;
+                        isAuthReady = true; // Auth prête!
                         checkAdminAccess(); 
                         listenForReservations(); 
+                        updateFormState(); // Mettre à jour le bouton pour l'activer
                     } else {
-                        if (initialAuthToken) {
-                            await signInWithCustomToken(auth, initialAuthToken);
-                        } else {
-                            // Connexion anonyme si aucun token initial n'est fourni
-                            await signInAnonymously(auth); 
+                        try {
+                            if (initialAuthToken) {
+                                await signInWithCustomToken(auth, initialAuthToken);
+                            } else {
+                                // Connexion anonyme si aucun token initial n'est fourni
+                                await signInAnonymously(auth); 
+                            }
+                        } catch (e) {
+                            console.error("Authentication error:", e);
+                            // S'il y a une erreur d'auth, on ne met pas isAuthReady à true pour éviter les writes
+                            isAuthReady = false; 
+                            updateFormState();
                         }
                     }
                 });
@@ -734,6 +752,8 @@
 
             } catch (error) {
                 console.error("Error during Firebase initialization or authentication:", error);
+                isAuthReady = false;
+                updateFormState();
                 showModal(false, "Erreur Critique", "Impossible de se connecter au service de réservation.");
             }
         }
@@ -807,8 +827,9 @@
             const submitButton = document.getElementById('submitButton');
             const loadingMessage = document.getElementById('loadingMessage');
 
-            if (!db || !userId) {
-                showModal(false, "Erreur", "Le service de réservation n'est pas prêt. Veuillez réessayer.");
+            // Vérification de l'état (bien que le bouton soit désactivé, c'est une sécurité)
+            if (!isAuthReady || !db || !userId) {
+                showModal(false, "Erreur", "Le service de réservation n'est pas encore prêt. Veuillez patienter quelques instants et réessayer.");
                 return;
             }
 
@@ -860,24 +881,27 @@
             const scrollToReservationBtn = document.getElementById('scrollToReservation');
 
 
-            // 1. Bouton "Réserver une Table" dans le Hero
+            // 1. Mise à jour initiale de l'état du formulaire
+            updateFormState(); // Mettre le bouton en mode chargement
+
+            // 2. Bouton "Réserver une Table" dans le Hero
             if (scrollToReservationBtn) scrollToReservationBtn.addEventListener('click', scrollToReservationAndGuide);
 
-            // 2. Formulaire de Réservation
+            // 3. Formulaire de Réservation
             if (form) form.addEventListener('submit', handleReservationSubmit);
             
-            // 3. Modal de Statut
+            // 4. Modal de Statut
             if (closeModalButton) closeModalButton.addEventListener('click', closeModal);
             
-            // 4. Panneau Admin
+            // 5. Panneau Admin
             // Le bouton est toujours visible. L'action est toujours de demander le code secret ou de toggler si déjà admin/mode activé
             if (adminToggleButton) adminToggleButton.addEventListener('click', promptForAdminCode);
             
-            // 5. Modal Code Admin
+            // 6. Modal Code Admin
             if (checkAdminCodeButton) checkAdminCodeButton.addEventListener('click', checkAdminCode);
             if (closeAdminCodeModalButton) closeAdminCodeModalButton.addEventListener('click', closeAdminCodeModal);
             
-            // 6. Chat IA (Sushi-Neko)
+            // 7. Chat IA (Sushi-Neko)
             if (aiChatButton) aiChatButton.addEventListener('click', toggleChat);
             if (closeChatButton) closeChatButton.addEventListener('click', toggleChat);
             if (aiSendButton) aiSendButton.addEventListener('click', sendAiPrompt);
@@ -890,7 +914,7 @@
                 });
             }
 
-            // 7. Initialisation de Firebase et de l'authentification
+            // 8. Initialisation de Firebase et de l'authentification
             initializeFirebase();
         }
 
