@@ -6,7 +6,7 @@
     <title>Sushi Live - Menu et Réservation</title>
     <!-- Chargement de Tailwind CSS pour un style moderne et rapide -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Playfair+Display:wght@700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Playfair+Display:wght=700&display=swap" rel="stylesheet">
     <style>
         /* Configuration de la police Inter par défaut et une police plus élégante pour les titres */
         body {
@@ -42,10 +42,10 @@
             right: 20px;
             z-index: 1000;
         }
-        /* Classe pour masquer le bouton Admin par défaut (plus fiable) */
-        .hidden-admin-btn {
+        /* Classe pour masquer le bouton Admin par défaut (retirée pour le rendre visible) */
+        /* .hidden-admin-btn {
             display: none !important;
-        }
+        } */
         /* Style pour l'en-tête du tableau */
         .table-header {
             background-color: #e5e7eb; /* Gris clair pour l'en-tête */
@@ -312,7 +312,7 @@
         <section id="adminPanel" class="admin-panel bg-gray-100 py-12">
             <div class="container mx-auto px-4 max-w-6xl">
                 <h2 class="text-4xl font-bold title-font text-gray-800 mb-8 text-center">Tableau de Bord des Réservations</h2>
-                <p class="text-center text-gray-600 mb-4 font-mono">ID Administrateur à remplacer: <span id="adminUserIdDisplay">Chargement...</span></p>
+                <p class="text-center text-gray-600 mb-4 font-mono">ID Utilisateur Actuel: <span id="adminUserIdDisplay">Chargement...</span></p>
 
                 <div class="bg-white p-6 rounded-lg shadow-xl overflow-x-auto">
                     <table class="min-w-full divide-y divide-gray-200">
@@ -335,10 +335,10 @@
             </div>
         </section>
 
-        <!-- Bouton pour afficher/masquer le panneau d'administration. (Seulement visible pour l'ADMIN ID ou après code secret) -->
-        <!-- Utilisation de la classe hidden-admin-btn pour masquer par défaut, le JS la retirera -->
+        <!-- Bouton pour afficher/masquer le panneau d'administration. (MAINTENANT TOUJOURS VISIBLE) -->
+        <!-- La classe 'hidden-admin-btn' a été retirée pour le rendre visible par défaut -->
         <button id="adminToggleButton" class="admin-toggle-button px-5 py-3 bg-gray-800 text-white font-semibold rounded-full 
-            shadow-lg hover:bg-gray-700 transition duration-300 ease-in-out hidden-admin-btn">
+            shadow-lg hover:bg-gray-700 transition duration-300 ease-in-out">
             Admin
         </button>
         
@@ -446,7 +446,7 @@
         let auth;
         let userId;
         let hasLoadedInitialData = false; 
-        let isAdminModeActive = false; 
+        let isAdminModeActive = false; // Vrai si l'utilisateur est ADMIN_ID ou a entré le code secret
 
         // Références aux éléments du DOM 
         const collectionPath = `artifacts/${appId}/public/data/reservations`;
@@ -489,9 +489,10 @@
             const adminPanel = document.getElementById('adminPanel');
             const adminToggleButton = document.getElementById('adminToggleButton');
             
-            const isUserActuallyAdmin = (userId === ADMIN_ID); 
+            // Le panneau est ouvert UNIQUEMENT si l'utilisateur est ADMIN_ID OU si le mode est activé par le code secret
+            const canOpen = (userId === ADMIN_ID || isAdminModeActive);
             
-            if (adminPanel && (isUserActuallyAdmin || isAdminModeActive)) { 
+            if (adminPanel && canOpen) { 
                 adminPanel.classList.toggle('open');
                 adminPanel.style.display = 'block'; 
                 
@@ -503,6 +504,10 @@
                 if (adminPanel.classList.contains('open')) {
                     adminPanel.scrollIntoView({ behavior: 'smooth' });
                 }
+            } else if (adminPanel) {
+                 // Si le mode est désactivé (revient à l'état initial), masquer le panneau
+                 adminPanel.classList.remove('open');
+                 adminPanel.style.display = 'none';
             }
         }
         
@@ -685,31 +690,19 @@
         // --- Initialisation de Firebase et Logique Admin/Réservation ---
 
         function checkAdminAccess() {
-            const adminToggleButton = document.getElementById('adminToggleButton');
-            const adminPanel = document.getElementById('adminPanel');
+            // Le bouton est désormais toujours visible dans le HTML.
             const adminUserIdDisplay = document.getElementById('adminUserIdDisplay');
 
-            const isUserActuallyAdmin = (userId === ADMIN_ID);
-            
             if (adminUserIdDisplay) adminUserIdDisplay.textContent = userId;
 
-            if (adminToggleButton) {
-                // Rendre le bouton visible dans tous les cas, puis le cacher si on est sur la page Admin
-                adminToggleButton.classList.remove('hidden-admin-btn');
-                
-                if (isUserActuallyAdmin) {
-                    console.warn(`[ATTENTION ADMIN] Votre ID utilisateur actuel (${userId}) correspond à l'ADMIN_ID. Vous avez un accès direct.`);
-                    if (adminPanel) adminPanel.style.display = 'block';
-                    isAdminModeActive = true; 
-                    showToastNotification(`Bienvenue Administrateur ! Votre ID est: ${userId}`);
-                } else {
-                    if (ADMIN_ID === "PLACEHOLDER_ADMIN_USER_ID") {
-                         console.warn(`[ADMIN WARNING] Votre ID utilisateur est: ${userId}. Si vous êtes l'administrateur, remplacez "PLACEHOLDER_ADMIN_USER_ID" par cet ID dans le code JavaScript !`);
-                    }
-                    if (adminPanel) adminPanel.style.display = 'none';
-                    isAdminModeActive = false;
-                }
+            if (userId === ADMIN_ID) {
+                console.warn(`[ATTENTION ADMIN] Votre ID utilisateur actuel (${userId}) correspond à l'ADMIN_ID. Vous avez un accès direct.`);
+                isAdminModeActive = true; // Activer le mode admin directement
+                // On n'appelle pas toggleAdminPanelInternal ici, il faut que l'utilisateur clique.
+            } else if (ADMIN_ID === "PLACEHOLDER_ADMIN_USER_ID") {
+                 console.warn(`[ADMIN WARNING] Votre ID utilisateur est: ${userId}. Si vous êtes l'administrateur, remplacez "PLACEHOLDER_ADMIN_USER_ID" par cet ID dans le code JavaScript !`);
             }
+            // Retirer l'affichage/masquage conditionnel car le bouton est maintenant toujours visible
         }
 
 
@@ -759,6 +752,7 @@
                 const isUserActuallyAdmin = (userId === ADMIN_ID);
 
                 snapshot.docChanges().forEach((change) => {
+                    // Les notifications ne se déclenchent que si l'utilisateur est admin ou a entré le code secret
                     if (change.type === "added" && hasLoadedInitialData && (isUserActuallyAdmin || isAdminModeActive)) { 
                         const newReservation = change.doc.data();
                         const message = `Nouvelle réservation de ${newReservation.name} pour ${newReservation.people} pers. à ${newReservation.time} !`;
@@ -876,6 +870,7 @@
             if (closeModalButton) closeModalButton.addEventListener('click', closeModal);
             
             // 4. Panneau Admin
+            // Le bouton est toujours visible. L'action est toujours de demander le code secret ou de toggler si déjà admin/mode activé
             if (adminToggleButton) adminToggleButton.addEventListener('click', promptForAdminCode);
             
             // 5. Modal Code Admin
